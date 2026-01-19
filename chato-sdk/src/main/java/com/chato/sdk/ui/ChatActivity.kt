@@ -27,7 +27,6 @@ class ChatActivity : AppCompatActivity() {
     private var cfg: SdkConfigRes? = null
 
     // Buffer transcript to send AFTER Q3
-    // Pair(from, text) where from is "customer" or "bot"
     private val buffered = mutableListOf<Pair<String, String>>()
 
     private fun nowMs(): Long = System.currentTimeMillis()
@@ -35,18 +34,36 @@ class ChatActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         b = ActivityChatoChatBinding.inflate(layoutInflater)
+
+        supportActionBar?.hide()
+        title = ""
+
         setContentView(b.root)
 
+        // UI ONLY: popup sizing (x1.25 width, x2 height, capped)
         val dm = resources.displayMetrics
-        val w = (dm.widthPixels * 0.92).toInt()
-        val h = (dm.heightPixels * 0.60).toInt()
+        val targetW = (dm.widthPixels * 0.92f * 1.25f).toInt()
+        val targetH = (dm.heightPixels * 0.60f * 2.0f).toInt()
+        val w = minOf(targetW, (dm.widthPixels * 0.98f).toInt())
+        val h = minOf(targetH, (dm.heightPixels * 0.90f).toInt())
         window.setLayout(w, h)
 
         b.recycler.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
         b.recycler.adapter = adapter
 
-        // X closes popup only. NO session changes.
         b.close.setOnClickListener { finish() }
+
+
+        b.input.addTextChangedListener(object : android.text.TextWatcher {
+            override fun afterTextChanged(s: android.text.Editable?) {
+                b.send.isEnabled = !s.isNullOrBlank()
+            }
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+        })
+
+        b.send.isEnabled = false
+
 
         b.send.setOnClickListener {
             val text = b.input.text?.toString()?.trim().orEmpty()
@@ -71,10 +88,6 @@ class ChatActivity : AppCompatActivity() {
         )
     }
 
-    /**
-     * If session already exists -> open it (NO prechat)
-     * Else -> run prechat and create session only after Q3
-     */
     private fun startFlow() {
         val existing = Chato.getExistingSessionIdOrNull()
         if (!existing.isNullOrBlank()) {
@@ -91,7 +104,6 @@ class ChatActivity : AppCompatActivity() {
         val q2 = pre?.q2.orEmpty().trim()
         val q3 = pre?.q3.orEmpty().trim()
 
-        // No prechat -> create session and start realtime immediately
         if (q1.isBlank() && q2.isBlank() && q3.isBlank()) {
             step = PrechatStep.DONE
             Chato.getOrCreateSessionId()
@@ -146,10 +158,7 @@ class ChatActivity : AppCompatActivity() {
         if (q3.isNotBlank()) botSayAndBuffer(q3)
 
         step = PrechatStep.DONE
-
-        // Create session ONLY now (after Q3)
         Chato.getOrCreateSessionId()
-
         flushBufferedToBackendThenStartRealtime()
     }
 
@@ -181,21 +190,13 @@ class ChatActivity : AppCompatActivity() {
                 try {
                     api.sendMessage(
                         apiKey = apiKey,
-                        body = SendMessageReq(
-                            text = text,
-                            sessionId = sessionId,
-                            from = mappedFrom
-                        )
+                        body = SendMessageReq(text = text, sessionId = sessionId, from = mappedFrom)
                     )
-                } catch (e: Exception) {
-                    android.util.Log.w("CHATO", "Flush failed: ${e.message}")
+                } catch (_: Exception) {
                     break
                 }
             }
-
-            runOnUiThread {
-                ensureSessionAndStartRealtime(clearUiFirst = true)
-            }
+            runOnUiThread { ensureSessionAndStartRealtime(clearUiFirst = true) }
         }
     }
 
@@ -218,27 +219,25 @@ class ChatActivity : AppCompatActivity() {
             .child(sessionId)
             .limitToLast(200)
 
-        childListener?.let { l -> msgsQuery?.removeEventListener(l) }
+        childListener?.let { msgsQuery?.removeEventListener(it) }
 
         val listener = object : com.google.firebase.database.ChildEventListener {
-            override fun onChildAdded(snapshot: com.google.firebase.database.DataSnapshot, previousChildName: String?) {
+            override fun onChildAdded(snapshot: com.google.firebase.database.DataSnapshot, p: String?) {
                 val id = snapshot.key ?: return
                 if (!seenMessageIds.add(id)) return
 
                 val text = snapshot.child("text").getValue(String::class.java) ?: return
                 val from = snapshot.child("from").getValue(String::class.java) ?: "customer"
-                val at = snapshot.child("at").getValue(Long::class.java)
-                    ?: snapshot.child("at").getValue(Double::class.java)?.toLong()
-                    ?: 0L
+                val at = snapshot.child("at").getValue(Long::class.java) ?: 0L
 
                 adapter.submitAppend(ChatoMessage(at = at, from = from, text = text))
                 b.recycler.scrollToPosition(adapter.itemCount - 1)
             }
 
-            override fun onChildChanged(snapshot: com.google.firebase.database.DataSnapshot, previousChildName: String?) {}
-            override fun onChildRemoved(snapshot: com.google.firebase.database.DataSnapshot) {}
-            override fun onChildMoved(snapshot: com.google.firebase.database.DataSnapshot, previousChildName: String?) {}
-            override fun onCancelled(error: com.google.firebase.database.DatabaseError) {}
+            override fun onChildChanged(s: com.google.firebase.database.DataSnapshot, p: String?) {}
+            override fun onChildRemoved(s: com.google.firebase.database.DataSnapshot) {}
+            override fun onChildMoved(s: com.google.firebase.database.DataSnapshot, p: String?) {}
+            override fun onCancelled(e: com.google.firebase.database.DatabaseError) {}
         }
 
         q.addChildEventListener(listener)
@@ -257,15 +256,13 @@ class ChatActivity : AppCompatActivity() {
                     apiKey = apiKey,
                     body = SendMessageReq(text = text, sessionId = sessionId, from = "customer")
                 )
-            } catch (e: Exception) {
-                android.util.Log.w("CHATO", "Send failed: ${e.message}")
-            }
+            } catch (_: Exception) {}
         }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        childListener?.let { l -> msgsQuery?.removeEventListener(l) }
+        childListener?.let { msgsQuery?.removeEventListener(it) }
         childListener = null
         msgsQuery = null
     }

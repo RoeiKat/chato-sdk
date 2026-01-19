@@ -37,7 +37,11 @@ class ChatAdapter(
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-        val b = ItemChatoMessageBinding.inflate(LayoutInflater.from(parent.context), parent, false)
+        val b = ItemChatoMessageBinding.inflate(
+            LayoutInflater.from(parent.context),
+            parent,
+            false
+        )
         return VH(b)
     }
 
@@ -48,15 +52,18 @@ class ChatAdapter(
     override fun getItemCount(): Int = items.size
 
     class VH(private val b: ItemChatoMessageBinding) : RecyclerView.ViewHolder(b.root) {
+
         fun bind(m: ChatoMessage, fmt: SimpleDateFormat, customerColor: Int?) {
             val ctx = b.root.context
+
             b.bubble.text = m.text
             b.meta.text = fmt.format(Date(m.at))
 
             val isCustomer = m.from == "customer"
 
             val bg = GradientDrawable().apply {
-                cornerRadius = 18f
+                // UI ONLY: rounder bubble like modern chat UIs
+                cornerRadius = 52f
                 setColor(
                     if (isCustomer) {
                         customerColor ?: ContextCompat.getColor(ctx, R.color.chato_primary)
@@ -65,7 +72,17 @@ class ChatAdapter(
                     }
                 )
             }
+
             b.bubble.background = bg
+
+            // UI ONLY: outgoing white text
+            b.bubble.setTextColor(
+                if (isCustomer)
+                    ContextCompat.getColor(ctx, android.R.color.white)
+                else
+                    ContextCompat.getColor(ctx, R.color.chato_black)
+            )
+
             b.root.gravity = if (isCustomer) Gravity.END else Gravity.START
         }
     }

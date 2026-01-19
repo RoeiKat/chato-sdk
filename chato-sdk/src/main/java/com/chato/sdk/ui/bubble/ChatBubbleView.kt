@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.FrameLayout
@@ -12,6 +13,16 @@ import androidx.core.content.ContextCompat
 import com.chato.sdk.R
 
 class ChatBubbleView(context: Context) : FrameLayout(context) {
+
+    // UI-only sizing.
+    // Bubble: overall circle size.
+    // Padding: controls how "big" the icon looks inside the circle.
+    private val bubbleSizeDp = 80
+    private val iconPaddingDp = 18
+
+    // Only affects the SVG WebView branch (when backend provides a <svg> string).
+    // If backend returns null -> default ImageView is used and this value will not matter.
+    private val SVG_SCALE = 1.15
 
     private val bgDrawable = GradientDrawable().apply {
         shape = GradientDrawable.OVAL
@@ -22,12 +33,15 @@ class ChatBubbleView(context: Context) : FrameLayout(context) {
     private var iconWeb: WebView? = null
 
     init {
-        val size = dp(112)
+        val size = dp(bubbleSizeDp)
         layoutParams = LayoutParams(size, size)
 
         background = bgDrawable
         elevation = dp(8).toFloat()
         clipToOutline = true
+
+        // Key fix: icon fills bubble inner area; padding controls visual size.
+        setPadding(dp(iconPaddingDp), dp(iconPaddingDp), dp(iconPaddingDp), dp(iconPaddingDp))
 
         setDefaultIcon()
     }
@@ -38,15 +52,10 @@ class ChatBubbleView(context: Context) : FrameLayout(context) {
     }
 
     fun setIconSvgOrDefault(svgOrNull: String?) {
-        if (svgOrNull.isNullOrBlank()) {
-            setDefaultIcon()
-            return
-        }
-        setSvgIcon(svgOrNull)
+        if (svgOrNull.isNullOrBlank()) setDefaultIcon() else setSvgIcon(svgOrNull)
     }
 
     private fun setDefaultIcon() {
-        // Remove svg webview if exists
         iconWeb?.let { removeView(it) }
         iconWeb = null
 
@@ -54,7 +63,10 @@ class ChatBubbleView(context: Context) : FrameLayout(context) {
         icon.apply {
             setImageResource(R.drawable.ic_chato_chat)
             setColorFilter(ContextCompat.getColor(context, R.color.chato_black))
-            layoutParams = LayoutParams(dp(52), dp(52)).apply {
+
+            // Fill bubble inner area; bubble padding handles size.
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply {
                 gravity = Gravity.CENTER
             }
         }
@@ -63,7 +75,6 @@ class ChatBubbleView(context: Context) : FrameLayout(context) {
     }
 
     private fun setSvgIcon(svg: String) {
-        // Remove image if exists
         iconImage?.let { removeView(it) }
 
         val wv = iconWeb ?: WebView(context).also { iconWeb = it }
@@ -72,34 +83,63 @@ class ChatBubbleView(context: Context) : FrameLayout(context) {
             setLayerType(LAYER_TYPE_SOFTWARE, null)
             isVerticalScrollBarEnabled = false
             isHorizontalScrollBarEnabled = false
+            overScrollMode = OVER_SCROLL_NEVER
             webViewClient = WebViewClient()
+
             settings.javaScriptEnabled = false
             settings.loadWithOverviewMode = true
             settings.useWideViewPort = true
-            layoutParams = LayoutParams(dp(60), dp(60)).apply {
+            settings.cacheMode = WebSettings.LOAD_NO_CACHE
+            settings.domStorageEnabled = false
+
+            // Fill bubble inner area; bubble padding handles size.
+            layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply {
                 gravity = Gravity.CENTER
             }
+
+            clearCache(true)
+            clearHistory()
         }
 
         if (wv.parent == null) addView(wv)
 
-        // Make sure SVG has a viewport; user may upload any SVG, we just embed it.
         val html = """
             <html>
               <head>
                 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
                 <style>
-                  body, html { margin:0; padding:0; background:transparent; }
-                  svg { width:100%; height:100%; }
+                  html, body {
+                    margin: 0; padding: 0;
+                    width: 100%; height: 100%;
+                    background: transparent;
+                    overflow: hidden;
+                  }
+                  .wrap {
+                    width: 100%; height: 100%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                  }
+                  svg {
+                    width: auto !important;
+                    height: auto !important;
+                    max-width: 100% !important;
+                    max-height: 100% !important;
+                    display: block;
+                    transform: scale(${'$'}{SVG_SCALE});
+                    transform-origin: center center;
+                  }
                 </style>
               </head>
               <body>
-                $svg
+                <div class="wrap">
+                  $svg
+                </div>
               </body>
             </html>
         """.trimIndent()
 
-        wv.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+        wv.loadDataWithBaseURL("https://chato.local/", html, "text/html", "UTF-8", null)
     }
 
     private fun dp(v: Int): Int {
