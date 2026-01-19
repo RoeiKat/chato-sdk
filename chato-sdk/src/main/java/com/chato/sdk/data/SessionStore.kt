@@ -1,24 +1,33 @@
 package com.chato.sdk.data
 
+import android.content.Context
+import android.content.SharedPreferences
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 object SessionStore {
-    private val sessionByApiKey = ConcurrentHashMap<String, String>()
+    private const val PREFS = "chato_session_store"
+    private const val KEY_PREFIX = "sid_"
+
+    private var prefs: SharedPreferences? = null
+
+    fun init(context: Context) {
+        prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+    }
+
+    fun getExistingSessionId(apiKey: String): String? {
+        return prefs?.getString(KEY_PREFIX + apiKey, null)
+    }
 
     fun getOrCreateSessionId(apiKey: String): String {
-        return sessionByApiKey[apiKey] ?: run {
-            val sid = UUID.randomUUID().toString()
-            sessionByApiKey[apiKey] = sid
-            sid
-        }
+        val existing = getExistingSessionId(apiKey)
+        if (!existing.isNullOrBlank()) return existing
+
+        val sid = UUID.randomUUID().toString()
+        prefs?.edit()?.putString(KEY_PREFIX + apiKey, sid)?.apply()
+        return sid
     }
 
     fun clear(apiKey: String) {
-        sessionByApiKey.remove(apiKey)
-    }
-
-    fun clearAll() {
-        sessionByApiKey.clear()
+        prefs?.edit()?.remove(KEY_PREFIX + apiKey)?.apply()
     }
 }

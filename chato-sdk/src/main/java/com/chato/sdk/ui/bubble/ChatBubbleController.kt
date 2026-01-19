@@ -7,8 +7,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
-import androidx.core.view.ViewCompat
-import com.chato.sdk.R
+import com.chato.sdk.Chato
 
 class ChatBubbleController(
     private val activity: Activity,
@@ -24,6 +23,10 @@ class ChatBubbleController(
 
         val v = ChatBubbleView(activity).apply {
             setOnClickListener { onClick() }
+
+            // Apply remote theme (or fallbacks)
+            setBubbleColor(Chato.resolveBubbleBgColor(activity))
+            setIconSvgOrDefault(Chato.resolveIconSvgOrNull())
         }
 
         // Default position: middle-left

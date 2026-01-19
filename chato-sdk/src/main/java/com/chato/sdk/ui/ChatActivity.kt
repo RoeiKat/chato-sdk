@@ -1,18 +1,14 @@
 package com.chato.sdk.ui
 
 import android.os.Bundle
-import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
 import com.chato.sdk.Chato
 import com.chato.sdk.databinding.ActivityChatoChatBinding
 import com.chato.sdk.net.dto.SendMessageReq
+import com.chato.sdk.net.dto.SdkConfigRes
 import com.chato.sdk.realtime.FirebaseRealtime
 import com.chato.sdk.ui.model.ChatoMessage
-import com.google.firebase.database.ChildEventListener
-import com.google.firebase.database.DataSnapshot
-import com.google.firebase.database.DatabaseError
 import kotlinx.coroutines.launch
 
 class ChatActivity : AppCompatActivity() {
@@ -20,12 +16,21 @@ class ChatActivity : AppCompatActivity() {
     private lateinit var b: ActivityChatoChatBinding
     private val adapter = ChatAdapter()
 
-    private var messagesListener: ChildEventListener? = null
-
     private var msgsQuery: com.google.firebase.database.Query? = null
     private var childListener: com.google.firebase.database.ChildEventListener? = null
     private val seenMessageIds = HashSet<String>()
 
+    // ---- Prechat state ----
+    private enum class PrechatStep { WAIT_A1, WAIT_A2, DONE }
+
+    private var step: PrechatStep = PrechatStep.WAIT_A1
+    private var cfg: SdkConfigRes? = null
+
+    // Buffer transcript to send AFTER Q3
+    // Pair(from, text) where from is "customer" or "bot"
+    private val buffered = mutableListOf<Pair<String, String>>()
+
+    private fun nowMs(): Long = System.currentTimeMillis()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -33,51 +38,186 @@ class ChatActivity : AppCompatActivity() {
         setContentView(b.root)
 
         val dm = resources.displayMetrics
-        val w = (dm.widthPixels * 0.92).toInt()   // 92% width
-        val h = (dm.heightPixels * 0.60).toInt()  // 60% height (>= 50%)
+        val w = (dm.widthPixels * 0.92).toInt()
+        val h = (dm.heightPixels * 0.60).toInt()
         window.setLayout(w, h)
-
 
         b.recycler.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
         b.recycler.adapter = adapter
 
-
-        FirebaseRealtime.ready(
-            onReady = { startRealtime() },
-            onError = { e ->
-                android.util.Log.e("CHATO", "Firebase auth failed: ${e.message}", e)
-                android.widget.Toast.makeText(this, "Firebase auth failed", android.widget.Toast.LENGTH_LONG).show()
-            }
-        )
-
+        // X closes popup only. NO session changes.
+        b.close.setOnClickListener { finish() }
 
         b.send.setOnClickListener {
             val text = b.input.text?.toString()?.trim().orEmpty()
             if (text.isBlank()) return@setOnClickListener
             b.input.setText("")
-            send(text)
+            onUserSend(text)
         }
-        b.close.setOnClickListener { finish() }
+
+        FirebaseRealtime.ready(
+            onReady = {
+                Chato.refreshRemoteConfig { c ->
+                    runOnUiThread {
+                        cfg = c
+                        adapter.setCustomerBubbleColor(Chato.resolvePrimaryColor(this))
+                        startFlow()
+                    }
+                }
+            },
+            onError = { e ->
+                android.util.Log.e("CHATO", "Firebase auth failed: ${e.message}", e)
+            }
+        )
     }
 
-    private var msgsListener: com.google.firebase.database.ValueEventListener? = null
-    private var msgsRef: com.google.firebase.database.Query? = null
+    /**
+     * If session already exists -> open it (NO prechat)
+     * Else -> run prechat and create session only after Q3
+     */
+    private fun startFlow() {
+        val existing = Chato.getExistingSessionIdOrNull()
+        if (!existing.isNullOrBlank()) {
+            step = PrechatStep.DONE
+            ensureSessionAndStartRealtime(clearUiFirst = true)
+            return
+        }
+        startPrechat()
+    }
+
+    private fun startPrechat() {
+        val pre = cfg?.prechat
+        val q1 = pre?.q1.orEmpty().trim()
+        val q2 = pre?.q2.orEmpty().trim()
+        val q3 = pre?.q3.orEmpty().trim()
+
+        // No prechat -> create session and start realtime immediately
+        if (q1.isBlank() && q2.isBlank() && q3.isBlank()) {
+            step = PrechatStep.DONE
+            Chato.getOrCreateSessionId()
+            ensureSessionAndStartRealtime(clearUiFirst = true)
+            return
+        }
+
+        adapter.submitList(emptyList())
+        buffered.clear()
+        seenMessageIds.clear()
+
+        when {
+            q1.isNotBlank() -> {
+                step = PrechatStep.WAIT_A1
+                botSayAndBuffer(q1)
+            }
+            q2.isNotBlank() -> {
+                step = PrechatStep.WAIT_A2
+                botSayAndBuffer(q2)
+            }
+            else -> finishWithQ3()
+        }
+    }
+
+    private fun onUserSend(text: String) {
+        if (step == PrechatStep.DONE) {
+            sendToBackend(text)
+            return
+        }
+
+        addLocalCustomerMessage(text)
+        buffered.add("customer" to text)
+
+        val q2 = cfg?.prechat?.q2.orEmpty().trim()
+
+        when (step) {
+            PrechatStep.WAIT_A1 -> {
+                if (q2.isNotBlank()) {
+                    step = PrechatStep.WAIT_A2
+                    botSayAndBuffer(q2)
+                } else {
+                    finishWithQ3()
+                }
+            }
+            PrechatStep.WAIT_A2 -> finishWithQ3()
+            else -> {}
+        }
+    }
+
+    private fun finishWithQ3() {
+        val q3 = cfg?.prechat?.q3.orEmpty().trim()
+        if (q3.isNotBlank()) botSayAndBuffer(q3)
+
+        step = PrechatStep.DONE
+
+        // Create session ONLY now (after Q3)
+        Chato.getOrCreateSessionId()
+
+        flushBufferedToBackendThenStartRealtime()
+    }
+
+    private fun botSayAndBuffer(text: String) {
+        if (text.isBlank()) return
+        adapter.submitAppend(ChatoMessage(at = nowMs(), from = "bot", text = text))
+        buffered.add("bot" to text)
+        b.recycler.scrollToPosition(adapter.itemCount - 1)
+    }
+
+    private fun addLocalCustomerMessage(text: String) {
+        adapter.submitAppend(ChatoMessage(at = nowMs(), from = "customer", text = text))
+        b.recycler.scrollToPosition(adapter.itemCount - 1)
+    }
+
+    private fun flushBufferedToBackendThenStartRealtime() {
+        val apiKey = Chato.getApiKey()
+        val api = Chato.getApi()
+        val sessionId = Chato.getOrCreateSessionId()
+
+        if (buffered.isEmpty()) {
+            ensureSessionAndStartRealtime(clearUiFirst = true)
+            return
+        }
+
+        lifecycleScope.launch {
+            for ((from, text) in buffered) {
+                val mappedFrom = if (from == "bot") "owner" else "customer"
+                try {
+                    api.sendMessage(
+                        apiKey = apiKey,
+                        body = SendMessageReq(
+                            text = text,
+                            sessionId = sessionId,
+                            from = mappedFrom
+                        )
+                    )
+                } catch (e: Exception) {
+                    android.util.Log.w("CHATO", "Flush failed: ${e.message}")
+                    break
+                }
+            }
+
+            runOnUiThread {
+                ensureSessionAndStartRealtime(clearUiFirst = true)
+            }
+        }
+    }
+
+    private fun ensureSessionAndStartRealtime(clearUiFirst: Boolean) {
+        if (clearUiFirst) {
+            adapter.submitList(emptyList())
+            seenMessageIds.clear()
+        }
+        startRealtime()
+    }
 
     private fun startRealtime() {
         val apiKey = Chato.getApiKey()
-        val sessionId = Chato.getSessionId()
+        val sessionId = Chato.getExistingSessionIdOrNull() ?: return
 
-        seenMessageIds.clear()
-        adapter.submitList(emptyList())
-
-        val q = com.chato.sdk.realtime.FirebaseRealtime.db()
+        val q = FirebaseRealtime.db()
             .reference
             .child("messages")
             .child(apiKey)
             .child(sessionId)
             .limitToLast(200)
 
-        // Clean any previous listener (safety)
         childListener?.let { l -> msgsQuery?.removeEventListener(l) }
 
         val listener = object : com.google.firebase.database.ChildEventListener {
@@ -91,7 +231,7 @@ class ChatActivity : AppCompatActivity() {
                     ?: snapshot.child("at").getValue(Double::class.java)?.toLong()
                     ?: 0L
 
-                adapter.submitAppend(com.chato.sdk.ui.model.ChatoMessage(at = at, from = from, text = text))
+                adapter.submitAppend(ChatoMessage(at = at, from = from, text = text))
                 b.recycler.scrollToPosition(adapter.itemCount - 1)
             }
 
@@ -106,35 +246,27 @@ class ChatActivity : AppCompatActivity() {
         childListener = listener
     }
 
+    private fun sendToBackend(text: String) {
+        val apiKey = Chato.getApiKey()
+        val api = Chato.getApi()
+        val sessionId = Chato.getOrCreateSessionId()
+
+        lifecycleScope.launch {
+            try {
+                api.sendMessage(
+                    apiKey = apiKey,
+                    body = SendMessageReq(text = text, sessionId = sessionId, from = "customer")
+                )
+            } catch (e: Exception) {
+                android.util.Log.w("CHATO", "Send failed: ${e.message}")
+            }
+        }
+    }
 
     override fun onDestroy() {
         super.onDestroy()
         childListener?.let { l -> msgsQuery?.removeEventListener(l) }
         childListener = null
         msgsQuery = null
-    }
-
-
-
-
-    private fun send(text: String) {
-        val apiKey = Chato.getApiKey()
-        val api = Chato.getApi()
-
-        val currentSessionId = Chato.getSessionId()
-
-        b.recycler.scrollToPosition(adapter.itemCount - 1)
-
-        lifecycleScope.launch {
-            try {
-                val res = api.sendMessage(
-                    apiKey = apiKey,
-                    body = com.chato.sdk.net.dto.SendMessageReq(text = text, sessionId = currentSessionId)
-                )
-
-            } catch (e: Exception) {
-                Toast.makeText(this@ChatActivity, "Send failed: ${e.message}", Toast.LENGTH_SHORT).show()
-            }
-        }
     }
 }
