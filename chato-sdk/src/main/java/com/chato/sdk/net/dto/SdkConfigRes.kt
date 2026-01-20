@@ -20,5 +20,6 @@ data class PrechatConfig(
 data class ThemeConfig(
     val bubbleBg: String = "",
     val primary: String = "",
-    val iconSvg: String = ""
+    val iconSvg: String = "",
+    val title: String = "",
 )

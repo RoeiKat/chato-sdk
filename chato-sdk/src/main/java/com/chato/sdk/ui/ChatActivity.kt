@@ -83,6 +83,7 @@ class ChatActivity : AppCompatActivity() {
                         val primary = Chato.resolvePrimaryColor(this)
                         adapter.setCustomerBubbleColor(primary)
                         applySendButtonTheme(primary)
+                        b.title.text = Chato.resolveSupportTitle()
                         startFlow()
                     }
                 }

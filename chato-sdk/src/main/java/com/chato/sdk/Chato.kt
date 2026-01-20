@@ -138,6 +138,12 @@ object Chato {
         return svg.ifBlank { null }
     }
 
+    fun resolveSupportTitle(): String {
+        val raw = RemoteConfigStore.get()?.theme?.title
+        val cleaned = raw?.toString()?.trim().orEmpty()
+        return if (cleaned.isBlank()) "Support" else cleaned
+    }
+
     fun getExistingSessionIdOrNull(): String? {
         val key = config?.apiKey ?: return null
         return SessionStore.getExistingSessionId(key)

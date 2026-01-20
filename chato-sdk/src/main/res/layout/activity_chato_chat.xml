@@ -34,7 +34,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
-                    android:text="Support"
+                    android:text=""
                     android:textStyle="bold"
                     android:textSize="21sp"
                     android:textColor="@color/chato_black" />
