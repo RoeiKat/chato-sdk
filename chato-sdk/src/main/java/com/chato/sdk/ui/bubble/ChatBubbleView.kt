@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.view.Gravity
+import android.view.MotionEvent
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -14,14 +15,9 @@ import com.chato.sdk.R
 
 class ChatBubbleView(context: Context) : FrameLayout(context) {
 
-    // UI-only sizing.
-    // Bubble: overall circle size.
-    // Padding: controls how "big" the icon looks inside the circle.
     private val bubbleSizeDp = 80
     private val iconPaddingDp = 18
 
-    // Only affects the SVG WebView branch (when backend provides a <svg> string).
-    // If backend returns null -> default ImageView is used and this value will not matter.
     private val SVG_SCALE = 1.15
 
     private val bgDrawable = GradientDrawable().apply {
@@ -40,7 +36,6 @@ class ChatBubbleView(context: Context) : FrameLayout(context) {
         elevation = dp(8).toFloat()
         clipToOutline = true
 
-        // Key fix: icon fills bubble inner area; padding controls visual size.
         setPadding(dp(iconPaddingDp), dp(iconPaddingDp), dp(iconPaddingDp), dp(iconPaddingDp))
 
         setDefaultIcon()
@@ -63,8 +58,6 @@ class ChatBubbleView(context: Context) : FrameLayout(context) {
         icon.apply {
             setImageResource(R.drawable.ic_chato_chat)
             setColorFilter(ContextCompat.getColor(context, R.color.chato_black))
-
-            // Fill bubble inner area; bubble padding handles size.
             scaleType = ImageView.ScaleType.FIT_CENTER
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply {
                 gravity = Gravity.CENTER
@@ -96,6 +89,23 @@ class ChatBubbleView(context: Context) : FrameLayout(context) {
             layoutParams = LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT).apply {
                 gravity = Gravity.CENTER
             }
+
+            // ✅ IMPORTANT: WebView steals taps — forward them to the bubble click listener.
+            setOnTouchListener { _, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_UP -> {
+                        // This triggers the ChatBubbleView's click listener set by the controller
+                        this@ChatBubbleView.performClick()
+                        true
+                    }
+                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> true
+                    else -> true
+                }
+            }
+
+            // Prevent long-press selection/context menu
+            setOnLongClickListener { true }
+            isLongClickable = false
 
             clearCache(true)
             clearHistory()
@@ -140,6 +150,12 @@ class ChatBubbleView(context: Context) : FrameLayout(context) {
         """.trimIndent()
 
         wv.loadDataWithBaseURL("https://chato.local/", html, "text/html", "UTF-8", null)
+    }
+
+    // Accessibility: keep performClick happy
+    override fun performClick(): Boolean {
+        super.performClick()
+        return true
     }
 
     private fun dp(v: Int): Int {

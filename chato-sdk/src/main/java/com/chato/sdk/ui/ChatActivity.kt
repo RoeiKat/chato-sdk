@@ -10,6 +10,9 @@ import com.chato.sdk.net.dto.SdkConfigRes
 import com.chato.sdk.realtime.FirebaseRealtime
 import com.chato.sdk.ui.model.ChatoMessage
 import kotlinx.coroutines.launch
+import android.content.res.ColorStateList
+import android.graphics.Color
+
 
 class ChatActivity : AppCompatActivity() {
 
@@ -77,7 +80,9 @@ class ChatActivity : AppCompatActivity() {
                 Chato.refreshRemoteConfig { c ->
                     runOnUiThread {
                         cfg = c
-                        adapter.setCustomerBubbleColor(Chato.resolvePrimaryColor(this))
+                        val primary = Chato.resolvePrimaryColor(this)
+                        adapter.setCustomerBubbleColor(primary)
+                        applySendButtonTheme(primary)
                         startFlow()
                     }
                 }
@@ -127,6 +132,24 @@ class ChatActivity : AppCompatActivity() {
             else -> finishWithQ3()
         }
     }
+
+    private fun applySendButtonTheme(primary: Int) {
+        // disabled background (light gray)
+        val disabledBg = Color.parseColor("#E6E6E6")
+
+        val states = arrayOf(
+            intArrayOf(android.R.attr.state_enabled),
+            intArrayOf(-android.R.attr.state_enabled)
+        )
+        val colors = intArrayOf(primary, disabledBg)
+
+        // Tint the button background based on enabled/disabled state
+        b.send.backgroundTintList = ColorStateList(states, colors)
+
+        // Keep the airplane icon readable (you can switch to white if you want)
+        b.send.imageTintList = ColorStateList.valueOf(Color.BLACK)
+    }
+
 
     private fun onUserSend(text: String) {
         if (step == PrechatStep.DONE) {
