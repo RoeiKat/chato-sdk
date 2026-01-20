@@ -12,7 +12,7 @@ class MainActivity : AppCompatActivity() {
 
         Chato.init(
             context = applicationContext,
-            apiKey = "app_9c213aa786a83b41b8da03d0de93a358f073ba412d70c78f"
+            apiKey = "app_b84a5ec606bf5ee08b043a268040e5cf6cf7d596d2ec2769"
         )
     }
 
