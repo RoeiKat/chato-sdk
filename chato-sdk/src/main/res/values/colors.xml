@@ -4,4 +4,8 @@
     <color name="chato_black">#1C1C1C</color>
     <color name="chato_white">#FFFFFF</color>
     <color name="chato_gray">#F2F2F2</color>
+    <color name="purple_200">#BB86FC</color>
+    <color name="purple_700">#3700B3</color>
+    <color name="teal_200">#03DAC5</color>
+    <color name="black">#000000</color>
 </resources>
