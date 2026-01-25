@@ -1,6 +1,7 @@
 plugins {
     id("com.android.library")
     id("org.jetbrains.kotlin.android")
+    id("maven-publish")
 }
 
 android {
@@ -23,6 +24,18 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
+    }
+}
+
+afterEvaluate {
+    publishing {
+        publications {
+            create<MavenPublication>("release") {
+                from(components["release"])
+                groupId = "com.github.RoeiKat"
+                artifactId = "chato-sdk"
+            }
+        }
     }
 }
 
