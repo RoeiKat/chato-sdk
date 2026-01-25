@@ -1,32 +1,35 @@
 # Chato Android SDK
 
-Chato is a lightweight Android SDK that lets you add **real-time in-app
-support chat** to your application in minutes.
+[![](https://jitpack.io/v/RoeiKat/chato-sdk.svg)](https://jitpack.io/#RoeiKat/chato-sdk)
 
-The SDK provides: - A floating chat bubble inside your app - A
-native-feeling chat popup - Real-time messaging with a web dashboard -
-Remote customization (colors, icon, copy) - No backend setup required
+Chato is a lightweight Android SDK that adds **real-time in-app support chat** to your application.
 
-------------------------------------------------------------------------
+It includes:
+- A floating chat bubble inside your app
+- A native chat popup screen
+- Real-time messaging with the Chato web dashboard
+- Remote customization (colors, icon, title, pre-chat copy)
+
+---
 
 ## Requirements
 
--   Android **minSdk 21+**
--   Kotlin (Java supported)
--   Internet permission enabled
--   A Chato account and **API key**
+- **Android minSdk 21+**
+- **JDK 17 required** (the SDK is built with Java 17 / Kotlin `jvmTarget = 17`)
+- Internet permission enabled
+- A Chato account and an **API key**
 
-------------------------------------------------------------------------
+> If your project uses Gradle toolchains, set `JavaLanguageVersion.of(17)`.
+
+---
 
 ## Installation
 
-### 1. Add JitPack repository
+### 1) Add JitPack repository
 
-Add JitPack to your project-level configuration.
+Add JitPack to your root `settings.gradle` / `settings.gradle.kts`:
 
-#### settings.gradle
-
-``` gradle
+```gradle
 dependencyResolutionManagement {
   repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
   repositories {
@@ -37,50 +40,41 @@ dependencyResolutionManagement {
 }
 ```
 
-------------------------------------------------------------------------
+### 2) Add the SDK dependency
 
-### 2. Add the SDK dependency
+In your app module `build.gradle` / `build.gradle.kts`:
 
-In your app module build.gradle:
-
-``` gradle
+```gradle
 dependencies {
-  implementation("com.github.YOUR_USERNAME:chato-sdk:VERSION")
+  implementation("com.github.RoeiKat:chato-sdk:v0.1.1")
 }
 ```
 
-Replace: - YOUR_USERNAME with your GitHub/JitPack username - VERSION
-with the published SDK version
-
-------------------------------------------------------------------------
-
-### 3. Internet permission
+### 3) Internet permission
 
 Ensure your app has internet access:
 
-``` xml
+```xml
 <uses-permission android:name="android.permission.INTERNET" />
 ```
 
-------------------------------------------------------------------------
+---
 
 ## Getting Started
 
-### 1. Create an app & API key
+### 1) Create an app & API key
 
-1.  Sign in to the Chato dashboard\
-2.  Create a new application\
-3.  Copy the generated API key
+1. Sign in to the Chato dashboard
+2. Create a new application
+3. Copy the generated API key
 
 Each API key represents one Android app.
 
-------------------------------------------------------------------------
+### 2) Initialize the SDK
 
-### 2. Initialize the SDK
+Initialize Chato once (typically in `onCreate`):
 
-Initialize Chato once, usually in onCreate.
-
-``` kotlin
+```kotlin
 class MainActivity : AppCompatActivity() {
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -95,13 +89,13 @@ class MainActivity : AppCompatActivity() {
 }
 ```
 
-------------------------------------------------------------------------
+---
 
 ## Activity Lifecycle (Important)
 
-Attach and detach Chato based on the Activity lifecycle.
+Attach and detach Chato based on the Activity lifecycle:
 
-``` kotlin
+```kotlin
 override fun onResume() {
   super.onResume()
   Chato.attach(activity = this)
@@ -113,71 +107,35 @@ override fun onPause() {
 }
 ```
 
-Why this is required: - attach() shows the chat bubble and popup -
-detach() removes overlays when the Activity is not visible - Prevents
-memory leaks and UI duplication
+Why:
+- `attach()` shows the bubble + enables the popup
+- `detach()` removes overlays when the Activity is not visible
+- prevents leaks / duplicated overlays
 
-------------------------------------------------------------------------
-
-## Chat Bubble
-
-The floating bubble: - Appears above your UI - Opens the chat popup when
-tapped - Persists while the Activity is active
-
-Customization: - Bubble color - Bubble icon (SVG) - Position
-(left/right)
-
-All customization is handled remotely from the dashboard.
-
-------------------------------------------------------------------------
-
-## Chat Popup
-
-The popup includes: - Header title (default: Support) - Message list -
-Input field - Send button
-
-The UI is designed to feel native and match your app's branding.
-
-------------------------------------------------------------------------
-
-## Pre-Chat Flow
-
-Before a chat starts, you can configure a pre-chat flow: 1. Ask for user
-name 2. Ask for email (optional) 3. Final message (FAQ / waiting
-message)
-
-Configured entirely from the dashboard.
-
-------------------------------------------------------------------------
+---
 
 ## Customization
 
-All customization is handled from the Chato dashboard: - Primary color
-(message bubbles + send button) - Bubble background color - Chat title -
-Bubble SVG icon - Pre-chat questions and copy
+Customization is managed remotely from the Chato dashboard:
 
-Changes apply instantly without an app update.
+- Primary color (bubbles + send button)
+- Bubble background
+- Chat title
+- Bubble SVG icon
+- Pre-chat questions and copy
 
-------------------------------------------------------------------------
+Changes can apply without publishing a new app version (depending on what you change).
+
+---
 
 ## Real-Time Messaging
 
-Messages sync instantly between: - Android app users - Web dashboard
-agents
+Messages sync instantly between:
+- Android app users
+- Web dashboard agents
 
-No polling or socket setup is required.
-
-------------------------------------------------------------------------
-
-## Notes for Evaluators
-
--   The SDK is distributed as a hosted Android library
--   Integrated using standard Gradle dependency management
--   No manual source code copying is required
--   Lifecycle handling follows Android best practices
-
-------------------------------------------------------------------------
+---
 
 ## License
 
-This project is provided as part of an academic assignment and demo SDK.
+Provided as a demo / project SDK.
