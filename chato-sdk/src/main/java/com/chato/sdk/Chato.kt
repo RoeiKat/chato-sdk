@@ -24,7 +24,7 @@ import java.lang.ref.WeakReference
 
 object Chato {
 
-    private const val BASE_URL = "http://10.0.2.2:3000/"
+    private const val BASE_URL = "https://chato-backend.onrender.com/"
 
     // ✅ safe to store
     private var application: Application? = null
